@@ -1,0 +1,7 @@
+<resources>
+    <string-array name="xposed_scope">
+        <!-- Target applications for LSPosed scope (e.g. android / SystemUI / specific target package) -->
+        <item>android</item>
+        <item>com.android.systemui</item>
+    </string-array>
+</resources>

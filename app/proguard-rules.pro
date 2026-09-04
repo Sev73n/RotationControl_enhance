@@ -1,0 +1,2 @@
+-keep class com.example.lsposedmodule.HookInit { *; }
+-keepclassmembers class com.example.lsposedmodule.HookInit { *; }
