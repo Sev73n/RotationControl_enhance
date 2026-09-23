@@ -66,6 +66,9 @@ fun MainScreen() {
     var tripleTapEnabled by remember {
         mutableStateOf(ConfigManager.getSetting(context, ConfigManager.KEY_TRIPLE_TAP, true))
     }
+    var imeGuardEnabled by remember {
+        mutableStateOf(ConfigManager.getSetting(context, ConfigManager.KEY_IME_GUARD, true))
+    }
 
     var showRestartDialog by remember { mutableStateOf(false) }
 
@@ -100,6 +103,17 @@ fun MainScreen() {
                     onCheckedChange = { newVal ->
                         twoFingerEnabled = newVal
                         ConfigManager.setSetting(context, ConfigManager.KEY_TWO_FINGER, newVal)
+                    },
+                    showDivider = true
+                )
+
+                MiuixPreferenceItem(
+                    title = "输入法弹出时禁用双指旋转",
+                    summary = "避免打字时误触发双指双击旋转",
+                    checked = imeGuardEnabled,
+                    onCheckedChange = { newVal ->
+                        imeGuardEnabled = newVal
+                        ConfigManager.setSetting(context, ConfigManager.KEY_IME_GUARD, newVal)
                     },
                     showDivider = true
                 )

@@ -35,7 +35,10 @@ object TwoFingerRotationHook {
 
         // 1. 初始化双指点击旋转手势检测器
         gestureDetector = ScreenRotationGestureDetector(
-            contextProvider = { systemContext }
+            contextProvider = { systemContext },
+            suppressionReason = {
+                if (ConfigManager.isImeGuardEnabled && ImeVisibilityTracker.isImeShown()) "IME is shown" else null
+            }
         ) { targetRotation, reason ->
             RotationController.rotateScreen(targetRotation, reason)
         }
@@ -135,6 +138,7 @@ object TwoFingerRotationHook {
                 RotationController.init(context, wmsInstance)
                 ConfigManager.initInSystemServer(context)
             }
+            ImeVisibilityTracker.init(wmsInstance)
 
             val success = registerPointerEventListener(wmsInstance, classLoader)
             if (success) {

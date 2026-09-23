@@ -25,6 +25,7 @@ object ConfigManager {
     const val KEY_TWO_FINGER = "lsp_rot_two_finger"
     const val KEY_BOTTOM_SWIPE = "lsp_rot_bottom_swipe"
     const val KEY_TRIPLE_TAP = "lsp_rot_triple_tap"
+    const val KEY_IME_GUARD = "lsp_rot_ime_guard"
 
     const val ACTION_UPDATE_CONFIG = "io.github.benbaobaoshigemi.rotationcontrol.UPDATE_CONFIG"
     const val EXTRA_KEY = "extra_key"
@@ -41,6 +42,10 @@ object ConfigManager {
 
     @Volatile
     var isTripleTapEnabled: Boolean = true
+        private set
+
+    @Volatile
+    var isImeGuardEnabled: Boolean = true
         private set
 
     private var isObserverRegistered = false
@@ -64,12 +69,13 @@ object ConfigManager {
                     KEY_TWO_FINGER -> isTwoFingerEnabled = value
                     KEY_BOTTOM_SWIPE -> isBottomSwipeEnabled = value
                     KEY_TRIPLE_TAP -> isTripleTapEnabled = value
+                    KEY_IME_GUARD -> isImeGuardEnabled = value
                 }
                 // 由 system_server (UID 1000) 自身写入系统设置持久化
                 try {
                     Settings.System.putInt(ctx.contentResolver, key, if (value) 1 else 0)
                 } catch (_: Throwable) {}
-                log("Broadcast config applied: $key=$value -> twoFinger=$isTwoFingerEnabled, bottomSwipe=$isBottomSwipeEnabled, tripleTap=$isTripleTapEnabled")
+                log("Broadcast config applied: $key=$value -> twoFinger=$isTwoFingerEnabled, bottomSwipe=$isBottomSwipeEnabled, tripleTap=$isTripleTapEnabled, imeGuard=$isImeGuardEnabled")
             }
         }
         try {
@@ -95,6 +101,7 @@ object ConfigManager {
             cr.registerContentObserver(Settings.System.getUriFor(KEY_TWO_FINGER), false, observer)
             cr.registerContentObserver(Settings.System.getUriFor(KEY_BOTTOM_SWIPE), false, observer)
             cr.registerContentObserver(Settings.System.getUriFor(KEY_TRIPLE_TAP), false, observer)
+            cr.registerContentObserver(Settings.System.getUriFor(KEY_IME_GUARD), false, observer)
             log("ContentObserver registered for gesture settings in system_server")
         } catch (t: Throwable) {
             log("Failed to register ContentObserver: ${t.message}")
@@ -107,7 +114,8 @@ object ConfigManager {
             isTwoFingerEnabled = Settings.System.getInt(cr, KEY_TWO_FINGER, 1) == 1
             isBottomSwipeEnabled = Settings.System.getInt(cr, KEY_BOTTOM_SWIPE, 1) == 1
             isTripleTapEnabled = Settings.System.getInt(cr, KEY_TRIPLE_TAP, 1) == 1
-            log("Config updated: twoFinger=$isTwoFingerEnabled, bottomSwipe=$isBottomSwipeEnabled, tripleTap=$isTripleTapEnabled")
+            isImeGuardEnabled = Settings.System.getInt(cr, KEY_IME_GUARD, 1) == 1
+            log("Config updated: twoFinger=$isTwoFingerEnabled, bottomSwipe=$isBottomSwipeEnabled, tripleTap=$isTripleTapEnabled, imeGuard=$isImeGuardEnabled")
         } catch (t: Throwable) {
             log("Error reading Settings.System: ${t.message}")
         }
@@ -170,11 +178,13 @@ object ConfigManager {
         val twoFinger = sp.getBoolean(KEY_TWO_FINGER, true)
         val bottomSwipe = sp.getBoolean(KEY_BOTTOM_SWIPE, true)
         val tripleTap = sp.getBoolean(KEY_TRIPLE_TAP, true)
+        val imeGuard = sp.getBoolean(KEY_IME_GUARD, true)
 
         listOf(
             KEY_TWO_FINGER to twoFinger,
             KEY_BOTTOM_SWIPE to bottomSwipe,
-            KEY_TRIPLE_TAP to tripleTap
+            KEY_TRIPLE_TAP to tripleTap,
+            KEY_IME_GUARD to imeGuard
         ).forEach { (k, v) ->
             val intent = Intent(ACTION_UPDATE_CONFIG).apply {
                 putExtra(EXTRA_KEY, k)

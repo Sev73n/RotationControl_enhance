@@ -29,6 +29,7 @@ import kotlin.math.min
  */
 class ScreenRotationGestureDetector(
     private val contextProvider: () -> Context?,
+    private val suppressionReason: () -> String? = { null },
     private val onRotateAction: (targetRotation: Int, reason: String) -> Unit
 ) {
     companion object {
@@ -229,6 +230,12 @@ class ScreenRotationGestureDetector(
                     val drift = hypot(centroid.x - t1.centroid_phys.x, centroid.y - t1.centroid_phys.y)
                     if (drift > maxDriftPx) {
                         resetToIdle("Tap 2 drift too large: $drift px > $maxDriftPx px")
+                        return
+                    }
+
+                    val suppressed = suppressionReason()
+                    if (suppressed != null) {
+                        resetToIdle("Gesture suppressed: $suppressed")
                         return
                     }
 
