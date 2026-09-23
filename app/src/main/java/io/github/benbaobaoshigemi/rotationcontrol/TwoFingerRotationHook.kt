@@ -40,21 +40,21 @@ object TwoFingerRotationHook {
                 if (ConfigManager.isImeGuardEnabled && ImeVisibilityTracker.isImeShown()) "IME is shown" else null
             }
         ) { targetRotation, reason ->
-            RotationController.rotateScreen(targetRotation, reason)
+            if (passesAppFilter("TwoFingerDoubleTap")) RotationController.rotateScreen(targetRotation, reason)
         }
 
         // 2. 初始化底边三指横扫旋转手势检测器
         threeFingerSwipeDetector = ThreeFingerSwipeGestureDetector(
             contextProvider = { systemContext }
         ) { targetRotation, reason ->
-            RotationController.rotateScreen(targetRotation, reason)
+            if (passesAppFilter("ThreeFingerSwipe")) RotationController.rotateScreen(targetRotation, reason)
         }
 
         // 3. 初始化三指三击切换锁定手势检测器
         tripleTapDetector = ThreeFingerTripleTapDetector(
             contextProvider = { systemContext }
         ) {
-            RotationController.toggleRotationLock()
+            if (passesAppFilter("ThreeFingerTripleTap")) RotationController.toggleRotationLock()
         }
 
         // ==========================================
@@ -126,6 +126,12 @@ object TwoFingerRotationHook {
         } catch (t: Throwable) {
             XposedBridge.log("[$TAG] Failed to hook InputManagerService: ${t.message}")
         }
+    }
+
+    private fun passesAppFilter(gesture: String): Boolean {
+        val blocked = ForegroundAppFilter.blockedForegroundPackage(systemContext) ?: return true
+        XposedBridge.log("[$TAG] $gesture suppressed: foreground app $blocked is in filter list")
+        return false
     }
 
     @Synchronized

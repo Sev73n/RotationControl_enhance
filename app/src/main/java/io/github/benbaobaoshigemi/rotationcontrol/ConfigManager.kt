@@ -26,10 +26,12 @@ object ConfigManager {
     const val KEY_BOTTOM_SWIPE = "lsp_rot_bottom_swipe"
     const val KEY_TRIPLE_TAP = "lsp_rot_triple_tap"
     const val KEY_IME_GUARD = "lsp_rot_ime_guard"
+    const val KEY_BLOCKED_APPS = "lsp_rot_blocked_apps"
 
     const val ACTION_UPDATE_CONFIG = "io.github.benbaobaoshigemi.rotationcontrol.UPDATE_CONFIG"
     const val EXTRA_KEY = "extra_key"
     const val EXTRA_VALUE = "extra_value"
+    const val EXTRA_STRING_VALUE = "extra_string_value"
 
     // system_server 内部内存实时状态缓存
     @Volatile
@@ -48,6 +50,10 @@ object ConfigManager {
     var isImeGuardEnabled: Boolean = true
         private set
 
+    @Volatile
+    var blockedPackages: Set<String> = emptySet()
+        private set
+
     private var isObserverRegistered = false
 
     /**
@@ -64,6 +70,15 @@ object ConfigManager {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 val key = intent.getStringExtra(EXTRA_KEY) ?: return
+                if (key == KEY_BLOCKED_APPS) {
+                    val raw = intent.getStringExtra(EXTRA_STRING_VALUE) ?: ""
+                    blockedPackages = decodePackages(raw)
+                    try {
+                        Settings.System.putString(ctx.contentResolver, key, raw)
+                    } catch (_: Throwable) {}
+                    log("Broadcast config applied: blockedApps=${blockedPackages.size} $blockedPackages")
+                    return
+                }
                 val value = intent.getBooleanExtra(EXTRA_VALUE, true)
                 when (key) {
                     KEY_TWO_FINGER -> isTwoFingerEnabled = value
@@ -102,6 +117,7 @@ object ConfigManager {
             cr.registerContentObserver(Settings.System.getUriFor(KEY_BOTTOM_SWIPE), false, observer)
             cr.registerContentObserver(Settings.System.getUriFor(KEY_TRIPLE_TAP), false, observer)
             cr.registerContentObserver(Settings.System.getUriFor(KEY_IME_GUARD), false, observer)
+            cr.registerContentObserver(Settings.System.getUriFor(KEY_BLOCKED_APPS), false, observer)
             log("ContentObserver registered for gesture settings in system_server")
         } catch (t: Throwable) {
             log("Failed to register ContentObserver: ${t.message}")
@@ -115,7 +131,8 @@ object ConfigManager {
             isBottomSwipeEnabled = Settings.System.getInt(cr, KEY_BOTTOM_SWIPE, 1) == 1
             isTripleTapEnabled = Settings.System.getInt(cr, KEY_TRIPLE_TAP, 1) == 1
             isImeGuardEnabled = Settings.System.getInt(cr, KEY_IME_GUARD, 1) == 1
-            log("Config updated: twoFinger=$isTwoFingerEnabled, bottomSwipe=$isBottomSwipeEnabled, tripleTap=$isTripleTapEnabled, imeGuard=$isImeGuardEnabled")
+            blockedPackages = decodePackages(Settings.System.getString(cr, KEY_BLOCKED_APPS) ?: "")
+            log("Config updated: twoFinger=$isTwoFingerEnabled, bottomSwipe=$isBottomSwipeEnabled, tripleTap=$isTripleTapEnabled, imeGuard=$isImeGuardEnabled, blockedApps=${blockedPackages.size}")
         } catch (t: Throwable) {
             log("Error reading Settings.System: ${t.message}")
         }
@@ -171,6 +188,57 @@ object ConfigManager {
     }
 
     /**
+     * App 端读取过滤名单：本地 SharedPreferences 优先，未存过则回退到 Settings.System
+     */
+    fun getBlockedApps(context: Context): Set<String> {
+        return try {
+            val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            val raw = if (sp.contains(KEY_BLOCKED_APPS)) {
+                sp.getString(KEY_BLOCKED_APPS, "") ?: ""
+            } else {
+                Settings.System.getString(context.contentResolver, KEY_BLOCKED_APPS) ?: ""
+            }
+            decodePackages(raw)
+        } catch (_: Throwable) {
+            emptySet()
+        }
+    }
+
+    /**
+     * App 端保存过滤名单：与布尔开关相同的 SharedPreferences + Broadcast + Settings/Root 兜底链路
+     */
+    fun setBlockedApps(context: Context, packages: Set<String>) {
+        val raw = encodePackages(packages)
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_BLOCKED_APPS, raw).apply()
+
+        context.sendBroadcast(Intent(ACTION_UPDATE_CONFIG).apply {
+            putExtra(EXTRA_KEY, KEY_BLOCKED_APPS)
+            putExtra(EXTRA_STRING_VALUE, raw)
+        })
+
+        Thread({
+            var directSuccess = false
+            try {
+                directSuccess = Settings.System.putString(context.contentResolver, KEY_BLOCKED_APPS, raw)
+            } catch (_: Throwable) {}
+            if (!directSuccess) {
+                runRootCmd("settings put system $KEY_BLOCKED_APPS '$raw'")
+            }
+        }, "ConfigSync-$KEY_BLOCKED_APPS").start()
+    }
+
+    private val PACKAGE_NAME_REGEX = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+$")
+
+    fun isValidPackageName(name: String): Boolean = PACKAGE_NAME_REGEX.matches(name)
+
+    private fun encodePackages(packages: Set<String>): String =
+        packages.filter { isValidPackageName(it) }.sorted().joinToString(",")
+
+    private fun decodePackages(raw: String): Set<String> =
+        raw.split(',').map { it.trim() }.filter { isValidPackageName(it) }.toSet()
+
+    /**
      * 在 App 启动时，将本地所有配置同步广播给 system_server
      */
     fun syncAllSettingsToSystem(context: Context) {
@@ -191,6 +259,13 @@ object ConfigManager {
                 putExtra(EXTRA_VALUE, v)
             }
             context.sendBroadcast(intent)
+        }
+
+        if (sp.contains(KEY_BLOCKED_APPS)) {
+            context.sendBroadcast(Intent(ACTION_UPDATE_CONFIG).apply {
+                putExtra(EXTRA_KEY, KEY_BLOCKED_APPS)
+                putExtra(EXTRA_STRING_VALUE, sp.getString(KEY_BLOCKED_APPS, "") ?: "")
+            })
         }
     }
 

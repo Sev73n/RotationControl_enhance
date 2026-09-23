@@ -184,6 +184,75 @@ fun MiuixPreferenceItem(
 }
 
 /**
+ * MIUIX 设置导航行 (MiuixNavItem)：右侧箭头，点击进入二级页面
+ */
+@Composable
+fun MiuixNavItem(
+    title: String,
+    summary: String? = null,
+    value: String? = null,
+    onClick: () -> Unit,
+    showDivider: Boolean = true
+) {
+    val isDark = isSystemInDarkTheme()
+    val textPrimary = if (isDark) MiuixColors.TextPrimaryDark else MiuixColors.TextPrimaryLight
+    val textSecondary = if (isDark) MiuixColors.TextSecondaryDark else MiuixColors.TextSecondaryLight
+    val dividerColor = if (isDark) MiuixColors.DividerDark else MiuixColors.DividerLight
+
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onClick() }
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp)
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textPrimary
+                )
+                if (!summary.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = summary,
+                        fontSize = 12.5.sp,
+                        color = textSecondary,
+                        lineHeight = 17.sp
+                    )
+                }
+            }
+            if (!value.isNullOrEmpty()) {
+                Text(
+                    text = value,
+                    fontSize = 14.sp,
+                    color = textSecondary,
+                    modifier = Modifier.padding(end = 6.dp)
+                )
+            }
+            Text(
+                text = "›",
+                fontSize = 22.sp,
+                color = textSecondary
+            )
+        }
+
+        if (showDivider) {
+            HorizontalDivider(
+                color = dividerColor,
+                thickness = 0.6.dp
+            )
+        }
+    }
+}
+
+/**
  * MIUIX 原生风格操作按钮 (MiuixButton)：
  * - 22dp 圆角药丸形态
  * - 按压弹性微缩 (0.97x) 与触觉震动反馈

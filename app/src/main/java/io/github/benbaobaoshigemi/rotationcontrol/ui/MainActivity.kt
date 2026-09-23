@@ -3,6 +3,7 @@ package io.github.benbaobaoshigemi.rotationcontrol.ui
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -20,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -30,6 +32,7 @@ import io.github.benbaobaoshigemi.rotationcontrol.ConfigManager
 import io.github.benbaobaoshigemi.rotationcontrol.ui.miuix.MiuixButton
 import io.github.benbaobaoshigemi.rotationcontrol.ui.miuix.MiuixCard
 import io.github.benbaobaoshigemi.rotationcontrol.ui.miuix.MiuixColors
+import io.github.benbaobaoshigemi.rotationcontrol.ui.miuix.MiuixNavItem
 import io.github.benbaobaoshigemi.rotationcontrol.ui.miuix.MiuixPreferenceItem
 import io.github.benbaobaoshigemi.rotationcontrol.ui.miuix.MiuixTheme
 
@@ -42,14 +45,35 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MiuixTheme {
-                MainScreen()
+                AppRoot()
             }
         }
     }
 }
 
 @Composable
-fun MainScreen() {
+fun AppRoot() {
+    val context = LocalContext.current
+    var showAppFilter by rememberSaveable { mutableStateOf(false) }
+    var blockedApps by remember { mutableStateOf(ConfigManager.getBlockedApps(context)) }
+
+    if (showAppFilter) {
+        BackHandler { showAppFilter = false }
+        AppFilterScreen(
+            initialSelection = blockedApps,
+            onSelectionChanged = { blockedApps = it },
+            onBack = { showAppFilter = false }
+        )
+    } else {
+        MainScreen(
+            blockedCount = blockedApps.size,
+            onOpenAppFilter = { showAppFilter = true }
+        )
+    }
+}
+
+@Composable
+fun MainScreen(blockedCount: Int, onOpenAppFilter: () -> Unit) {
     val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
     val bgColor = if (isDark) MiuixColors.BackgroundDark else MiuixColors.BackgroundLight
@@ -137,6 +161,18 @@ fun MainScreen() {
                         tripleTapEnabled = newVal
                         ConfigManager.setSetting(context, ConfigManager.KEY_TRIPLE_TAP, newVal)
                     },
+                    showDivider = false
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            MiuixCard {
+                MiuixNavItem(
+                    title = "应用过滤名单",
+                    summary = "前台为已选应用时，以上手势均不触发",
+                    value = if (blockedCount > 0) "已选 $blockedCount 个" else "未设置",
+                    onClick = onOpenAppFilter,
                     showDivider = false
                 )
             }
