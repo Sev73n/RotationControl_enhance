@@ -65,8 +65,8 @@ class ForegroundFilterPolicyTest {
 
     @Test
     fun checkingTheWholeWeChatPackageStillBlocksChats() {
-        assertTrue(reason(launcher, guard = true, "com.tencent.mm")!!.startsWith("rule com.tencent.mm"))
-        assertTrue(reason(chatting, guard = false, "com.tencent.mm")!!.startsWith("rule "))
+        assertTrue(reason(launcher, guard = true, "com.tencent.mm")!!.startsWith("all-gestures rule com.tencent.mm"))
+        assertTrue(reason(chatting, guard = false, "com.tencent.mm")!!.startsWith("all-gestures rule "))
     }
 
     @Test
@@ -93,7 +93,7 @@ class ForegroundFilterPolicyTest {
             processName = "com.example.browser"
         )
         assertNull(reason(other, guard = true))
-        assertTrue(reason(other, guard = true, "com.example.browser")!!.startsWith("rule "))
+        assertTrue(reason(other, guard = true, "com.example.browser")!!.startsWith("all-gestures rule "))
     }
 
     @Test
@@ -123,9 +123,28 @@ class ForegroundFilterPolicyTest {
         processName = processName
     )
 
+    @Test
+    fun perGestureRulesLeaveTheOtherGesturesAlone() {
+        val browser = ForegroundFilterPolicy.Foreground(
+            packageName = "com.example.browser",
+            className = "com.example.browser.MainActivity",
+            processName = "com.example.browser"
+        )
+        val onlyTwoFinger = setOf("com.example.browser")
+        assertTrue(
+            ForegroundFilterPolicy.suppressionReason(browser, emptySet(), onlyTwoFinger, false)!!
+                .startsWith("gesture rule com.example.browser")
+        )
+        assertNull(ForegroundFilterPolicy.suppressionReason(browser, emptySet(), emptySet(), false))
+        assertTrue(
+            ForegroundFilterPolicy.suppressionReason(browser, onlyTwoFinger, emptySet(), false)!!
+                .startsWith("all-gestures rule")
+        )
+    }
+
     private fun reason(
         foreground: ForegroundFilterPolicy.Foreground,
         guard: Boolean,
         vararg rules: String
-    ) = ForegroundFilterPolicy.suppressionReason(foreground, rules.toSet(), guard)
+    ) = ForegroundFilterPolicy.suppressionReason(foreground, rules.toSet(), emptySet(), guard)
 }

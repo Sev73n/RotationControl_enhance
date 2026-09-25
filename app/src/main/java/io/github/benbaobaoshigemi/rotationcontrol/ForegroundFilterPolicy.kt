@@ -41,15 +41,19 @@ object ForegroundFilterPolicy {
 
     fun suppressionReason(
         foreground: Foreground?,
-        blockedRules: Set<String>,
+        allGestureRules: Set<String>,
+        thisGestureRules: Set<String>,
         weChatMiniProgramGuard: Boolean
     ): String? {
         if (foreground == null) return null
         if (weChatMiniProgramGuard && isWeChatMiniProgram(foreground)) {
             return "wechat miniprogram class=${foreground.className} process=${foreground.processName}"
         }
-        val matched = blockedRules.firstOrNull { ruleMatches(it, foreground) } ?: return null
-        return "rule $matched class=${foreground.className} process=${foreground.processName}"
+        val detail = "class=${foreground.className} process=${foreground.processName}"
+        val allMatch = allGestureRules.firstOrNull { ruleMatches(it, foreground) }
+        if (allMatch != null) return "all-gestures rule $allMatch $detail"
+        val matched = thisGestureRules.firstOrNull { ruleMatches(it, foreground) } ?: return null
+        return "gesture rule $matched $detail"
     }
 
     fun isWeChatMiniProgram(foreground: Foreground): Boolean {

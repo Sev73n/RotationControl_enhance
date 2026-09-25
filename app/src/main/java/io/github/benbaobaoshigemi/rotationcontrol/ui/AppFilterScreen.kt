@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import io.github.benbaobaoshigemi.rotationcontrol.ConfigManager
+import io.github.benbaobaoshigemi.rotationcontrol.GestureFilterScope
 import io.github.benbaobaoshigemi.rotationcontrol.ui.miuix.MiuixColors
 import io.github.benbaobaoshigemi.rotationcontrol.ui.miuix.MiuixDialog
 import kotlinx.coroutines.Dispatchers
@@ -74,6 +75,7 @@ private const val SAVE_DEBOUNCE_MS = 400L
 
 @Composable
 fun AppFilterScreen(
+    scope: GestureFilterScope,
     initialSelection: Set<String>,
     onSelectionChanged: (Set<String>) -> Unit,
     onBack: () -> Unit
@@ -107,7 +109,7 @@ fun AppFilterScreen(
         onSelectionChanged(selected)
         if (selected != savedSelection) {
             delay(SAVE_DEBOUNCE_MS)
-            ConfigManager.setBlockedApps(context, selected)
+            ConfigManager.setBlockedRules(context, scope, selected)
             savedSelection = selected
         }
     }
@@ -117,7 +119,7 @@ fun AppFilterScreen(
     DisposableEffect(Unit) {
         onDispose {
             if (latestSelected != latestSaved) {
-                ConfigManager.setBlockedApps(context, latestSelected)
+                ConfigManager.setBlockedRules(context, scope, latestSelected)
             }
         }
     }
@@ -179,13 +181,13 @@ fun AppFilterScreen(
                 }
                 Column(modifier = Modifier.padding(start = 4.dp)) {
                     Text(
-                        text = "应用过滤名单",
+                        text = scope.listTitle(),
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = textPrimary
                     )
                     Text(
-                        text = "已选 ${selected.size} 个 · 命中包名、Activity 或进程时不触发",
+                        text = "已选 ${selected.size} 个 · ${scope.listEffect()}",
                         fontSize = 12.sp,
                         color = textSecondary
                     )
@@ -297,7 +299,7 @@ fun AppFilterScreen(
         if (showClearDialog) {
             MiuixDialog(
                 title = "清空过滤名单",
-                message = "将移除全部 ${selected.size} 个已选应用，手势会在所有应用中恢复生效。",
+                message = scope.clearMessage(selected.size),
                 confirmText = "清空",
                 onConfirm = { selected = emptySet() },
                 onDismiss = { showClearDialog = false }
@@ -442,6 +444,27 @@ private fun ActionText(text: String, color: Color, enabled: Boolean, onClick: ()
             .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 6.dp, vertical = 4.dp)
     )
+}
+
+internal fun GestureFilterScope.listTitle(): String = when (this) {
+    GestureFilterScope.ALL -> "屏蔽所有手势"
+    GestureFilterScope.TWO_FINGER -> "仅屏蔽双指双击"
+    GestureFilterScope.BOTTOM_SWIPE -> "仅屏蔽底边三指横扫"
+    GestureFilterScope.TRIPLE_TAP -> "仅屏蔽三指三击"
+}
+
+internal fun GestureFilterScope.listEffect(): String = when (this) {
+    GestureFilterScope.ALL -> "命中时三种手势都不触发"
+    GestureFilterScope.TWO_FINGER -> "只禁止双指双击，其余手势仍可用"
+    GestureFilterScope.BOTTOM_SWIPE -> "只禁止底边三指横扫，其余手势仍可用"
+    GestureFilterScope.TRIPLE_TAP -> "只禁止三指三击，其余手势仍可用"
+}
+
+internal fun GestureFilterScope.clearMessage(count: Int): String = when (this) {
+    GestureFilterScope.ALL -> "将移除当前名单中的 $count 条规则，这些应用里三种手势都会恢复。"
+    GestureFilterScope.TWO_FINGER -> "将移除当前名单中的 $count 条规则。双指双击会恢复，其他手势名单不变。"
+    GestureFilterScope.BOTTOM_SWIPE -> "将移除当前名单中的 $count 条规则。底边三指横扫会恢复，其他手势名单不变。"
+    GestureFilterScope.TRIPLE_TAP -> "将移除当前名单中的 $count 条规则。三指三击会恢复，其他手势名单不变。"
 }
 
 private fun ruleCaption(entry: AppEntry): String {

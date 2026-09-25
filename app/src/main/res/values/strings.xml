@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">多指旋转控制</string>
-    <string name="xposed_description">多指屏幕旋转控制：双指双击定向旋转、底边三指横扫90度旋转、三指三击锁定切换。可按前台 Activity 或进程过滤；微信小程序前台默认不触发。</string>
+    <string name="xposed_description">多指屏幕旋转控制：双指双击定向旋转、底边三指横扫90度旋转、三指三击锁定切换。可按手势分别过滤前台应用，也可一次屏蔽全部手势；微信小程序前台默认不触发。</string>
 </resources>
 

@@ -40,21 +40,21 @@ object TwoFingerRotationHook {
                 if (ConfigManager.isImeGuardEnabled && ImeVisibilityTracker.isImeShown()) "IME is shown" else null
             }
         ) { targetRotation, reason ->
-            if (passesAppFilter("TwoFingerDoubleTap")) RotationController.rotateScreen(targetRotation, reason)
+            if (passesAppFilter(GestureFilterScope.TWO_FINGER)) RotationController.rotateScreen(targetRotation, reason)
         }
 
         // 2. 初始化底边三指横扫旋转手势检测器
         threeFingerSwipeDetector = ThreeFingerSwipeGestureDetector(
             contextProvider = { systemContext }
         ) { targetRotation, reason ->
-            if (passesAppFilter("ThreeFingerSwipe")) RotationController.rotateScreen(targetRotation, reason)
+            if (passesAppFilter(GestureFilterScope.BOTTOM_SWIPE)) RotationController.rotateScreen(targetRotation, reason)
         }
 
         // 3. 初始化三指三击切换锁定手势检测器
         tripleTapDetector = ThreeFingerTripleTapDetector(
             contextProvider = { systemContext }
         ) {
-            if (passesAppFilter("ThreeFingerTripleTap")) RotationController.toggleRotationLock()
+            if (passesAppFilter(GestureFilterScope.TRIPLE_TAP)) RotationController.toggleRotationLock()
         }
 
         // ==========================================
@@ -128,9 +128,9 @@ object TwoFingerRotationHook {
         }
     }
 
-    private fun passesAppFilter(gesture: String): Boolean {
-        val reason = ForegroundAppFilter.suppressionReason(systemContext) ?: return true
-        XposedBridge.log("[$TAG] $gesture suppressed: $reason")
+    private fun passesAppFilter(scope: GestureFilterScope): Boolean {
+        val reason = ForegroundAppFilter.suppressionReason(systemContext, scope) ?: return true
+        XposedBridge.log("[$TAG] ${scope.name} suppressed: $reason")
         return false
     }
 

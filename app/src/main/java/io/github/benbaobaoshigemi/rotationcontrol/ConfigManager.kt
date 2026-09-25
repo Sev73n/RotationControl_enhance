@@ -27,7 +27,6 @@ object ConfigManager {
     const val KEY_TRIPLE_TAP = "lsp_rot_triple_tap"
     const val KEY_IME_GUARD = "lsp_rot_ime_guard"
     const val KEY_WECHAT_MINIPROGRAM_GUARD = "lsp_rot_wechat_miniprog"
-    const val KEY_BLOCKED_APPS = "lsp_rot_blocked_apps"
 
     const val ACTION_UPDATE_CONFIG = "io.github.benbaobaoshigemi.rotationcontrol.UPDATE_CONFIG"
     const val EXTRA_KEY = "extra_key"
@@ -56,8 +55,11 @@ object ConfigManager {
         private set
 
     @Volatile
-    var blockedRules: Set<String> = emptySet()
+    var blockedRulesByScope: Map<GestureFilterScope, Set<String>> =
+        GestureFilterScope.entries.associateWith { emptySet() }
         private set
+
+    fun rulesFor(scope: GestureFilterScope): Set<String> = blockedRulesByScope[scope].orEmpty()
 
     private var isObserverRegistered = false
 
@@ -75,13 +77,15 @@ object ConfigManager {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 val key = intent.getStringExtra(EXTRA_KEY) ?: return
-                if (key == KEY_BLOCKED_APPS) {
+                val filterScope = GestureFilterScope.fromStorageKey(key)
+                if (filterScope != null) {
                     val raw = intent.getStringExtra(EXTRA_STRING_VALUE) ?: ""
-                    blockedRules = decodeRules(raw)
+                    val rules = decodeRules(raw)
+                    blockedRulesByScope = blockedRulesByScope + (filterScope to rules)
                     try {
                         Settings.System.putString(ctx.contentResolver, key, raw)
                     } catch (_: Throwable) {}
-                    log("Broadcast config applied: blockedRules=${blockedRules.size} $blockedRules")
+                    log("Broadcast config applied: ${filterScope.name}=${rules.size} $rules")
                     return
                 }
                 val value = intent.getBooleanExtra(EXTRA_VALUE, true)
@@ -124,7 +128,9 @@ object ConfigManager {
             cr.registerContentObserver(Settings.System.getUriFor(KEY_TRIPLE_TAP), false, observer)
             cr.registerContentObserver(Settings.System.getUriFor(KEY_IME_GUARD), false, observer)
             cr.registerContentObserver(Settings.System.getUriFor(KEY_WECHAT_MINIPROGRAM_GUARD), false, observer)
-            cr.registerContentObserver(Settings.System.getUriFor(KEY_BLOCKED_APPS), false, observer)
+            GestureFilterScope.entries.forEach { scope ->
+                cr.registerContentObserver(Settings.System.getUriFor(scope.storageKey), false, observer)
+            }
             log("ContentObserver registered for gesture settings in system_server")
         } catch (t: Throwable) {
             log("Failed to register ContentObserver: ${t.message}")
@@ -139,8 +145,10 @@ object ConfigManager {
             isTripleTapEnabled = Settings.System.getInt(cr, KEY_TRIPLE_TAP, 1) == 1
             isImeGuardEnabled = Settings.System.getInt(cr, KEY_IME_GUARD, 1) == 1
             isWeChatMiniProgramGuardEnabled = Settings.System.getInt(cr, KEY_WECHAT_MINIPROGRAM_GUARD, 1) == 1
-            blockedRules = decodeRules(Settings.System.getString(cr, KEY_BLOCKED_APPS) ?: "")
-            log("Config updated: twoFinger=$isTwoFingerEnabled, bottomSwipe=$isBottomSwipeEnabled, tripleTap=$isTripleTapEnabled, imeGuard=$isImeGuardEnabled, weChatMiniProgram=$isWeChatMiniProgramGuardEnabled, blockedRules=${blockedRules.size}")
+            blockedRulesByScope = GestureFilterScope.entries.associateWith { scope ->
+                decodeRules(Settings.System.getString(cr, scope.storageKey) ?: "")
+            }
+            log("Config updated: twoFinger=$isTwoFingerEnabled, bottomSwipe=$isBottomSwipeEnabled, tripleTap=$isTripleTapEnabled, imeGuard=$isImeGuardEnabled, weChatMiniProgram=$isWeChatMiniProgramGuardEnabled, filters=${blockedRulesByScope.mapValues { it.value.size }}")
         } catch (t: Throwable) {
             log("Error reading Settings.System: ${t.message}")
         }
@@ -196,15 +204,15 @@ object ConfigManager {
     }
 
     /**
-     * App 端读取过滤名单：本地 SharedPreferences 优先，未存过则回退到 Settings.System
+     * App 端读取某一档过滤名单：本地 SharedPreferences 优先，未存过则回退到 Settings.System
      */
-    fun getBlockedApps(context: Context): Set<String> {
+    fun getBlockedRules(context: Context, scope: GestureFilterScope): Set<String> {
         return try {
             val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            val raw = if (sp.contains(KEY_BLOCKED_APPS)) {
-                sp.getString(KEY_BLOCKED_APPS, "") ?: ""
+            val raw = if (sp.contains(scope.storageKey)) {
+                sp.getString(scope.storageKey, "") ?: ""
             } else {
-                Settings.System.getString(context.contentResolver, KEY_BLOCKED_APPS) ?: ""
+                Settings.System.getString(context.contentResolver, scope.storageKey) ?: ""
             }
             decodeRules(raw)
         } catch (_: Throwable) {
@@ -213,27 +221,27 @@ object ConfigManager {
     }
 
     /**
-     * App 端保存过滤名单：与布尔开关相同的 SharedPreferences + Broadcast + Settings/Root 兜底链路
+     * App 端保存某一档过滤名单：与布尔开关相同的 SharedPreferences + Broadcast + Settings/Root 兜底链路
      */
-    fun setBlockedApps(context: Context, packages: Set<String>) {
-        val raw = encodeRules(packages)
+    fun setBlockedRules(context: Context, scope: GestureFilterScope, rules: Set<String>) {
+        val raw = encodeRules(rules)
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_BLOCKED_APPS, raw).apply()
+            .edit().putString(scope.storageKey, raw).apply()
 
         context.sendBroadcast(Intent(ACTION_UPDATE_CONFIG).apply {
-            putExtra(EXTRA_KEY, KEY_BLOCKED_APPS)
+            putExtra(EXTRA_KEY, scope.storageKey)
             putExtra(EXTRA_STRING_VALUE, raw)
         })
 
         Thread({
             var directSuccess = false
             try {
-                directSuccess = Settings.System.putString(context.contentResolver, KEY_BLOCKED_APPS, raw)
+                directSuccess = Settings.System.putString(context.contentResolver, scope.storageKey, raw)
             } catch (_: Throwable) {}
             if (!directSuccess) {
-                runRootCmd("settings put system $KEY_BLOCKED_APPS '$raw'")
+                runRootCmd("settings put system ${scope.storageKey} '$raw'")
             }
-        }, "ConfigSync-$KEY_BLOCKED_APPS").start()
+        }, "ConfigSync-${scope.storageKey}").start()
     }
 
     fun canonicalizeFilterRule(raw: String): String? = ForegroundFilterPolicy.canonicalizeRule(raw)
@@ -271,11 +279,13 @@ object ConfigManager {
             context.sendBroadcast(intent)
         }
 
-        if (sp.contains(KEY_BLOCKED_APPS)) {
-            context.sendBroadcast(Intent(ACTION_UPDATE_CONFIG).apply {
-                putExtra(EXTRA_KEY, KEY_BLOCKED_APPS)
-                putExtra(EXTRA_STRING_VALUE, sp.getString(KEY_BLOCKED_APPS, "") ?: "")
-            })
+        GestureFilterScope.entries.forEach { scope ->
+            if (sp.contains(scope.storageKey)) {
+                context.sendBroadcast(Intent(ACTION_UPDATE_CONFIG).apply {
+                    putExtra(EXTRA_KEY, scope.storageKey)
+                    putExtra(EXTRA_STRING_VALUE, sp.getString(scope.storageKey, "") ?: "")
+                })
+            }
         }
     }
 

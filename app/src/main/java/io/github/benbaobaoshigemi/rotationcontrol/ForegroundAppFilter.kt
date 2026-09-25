@@ -17,13 +17,18 @@ object ForegroundAppFilter {
     @Volatile
     private var loggedProcessLookupFailure = false
 
-    fun suppressionReason(context: Context?): String? {
+    fun suppressionReason(context: Context?, scope: GestureFilterScope): String? {
         if (context == null) return null
-        val rules = ConfigManager.blockedRules
+        val allRules = ConfigManager.rulesFor(GestureFilterScope.ALL)
+        val gestureRules = if (scope == GestureFilterScope.ALL) {
+            emptySet()
+        } else {
+            ConfigManager.rulesFor(scope)
+        }
         val guard = ConfigManager.isWeChatMiniProgramGuardEnabled
-        if (rules.isEmpty() && !guard) return null
+        if (allRules.isEmpty() && gestureRules.isEmpty() && !guard) return null
         val foreground = resolveForeground(context) ?: return null
-        return ForegroundFilterPolicy.suppressionReason(foreground, rules, guard)
+        return ForegroundFilterPolicy.suppressionReason(foreground, allRules, gestureRules, guard)
     }
 
     private fun resolveForeground(context: Context): ForegroundFilterPolicy.Foreground? {

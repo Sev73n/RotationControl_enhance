@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.benbaobaoshigemi.rotationcontrol.ConfigManager
+import io.github.benbaobaoshigemi.rotationcontrol.GestureFilterScope
 import io.github.benbaobaoshigemi.rotationcontrol.ui.miuix.MiuixButton
 import io.github.benbaobaoshigemi.rotationcontrol.ui.miuix.MiuixCard
 import io.github.benbaobaoshigemi.rotationcontrol.ui.miuix.MiuixColors
@@ -54,26 +56,39 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppRoot() {
     val context = LocalContext.current
-    var showAppFilter by rememberSaveable { mutableStateOf(false) }
-    var blockedApps by remember { mutableStateOf(ConfigManager.getBlockedApps(context)) }
-
-    if (showAppFilter) {
-        BackHandler { showAppFilter = false }
-        AppFilterScreen(
-            initialSelection = blockedApps,
-            onSelectionChanged = { blockedApps = it },
-            onBack = { showAppFilter = false }
+    var openFilterName by rememberSaveable { mutableStateOf<String?>(null) }
+    var blockedByScope by remember {
+        mutableStateOf(
+            GestureFilterScope.entries.associateWith { ConfigManager.getBlockedRules(context, it) }
         )
+    }
+    val openScope = openFilterName?.let { name ->
+        GestureFilterScope.entries.firstOrNull { it.name == name }
+    }
+
+    if (openScope != null) {
+        BackHandler { openFilterName = null }
+        key(openScope) {
+            AppFilterScreen(
+                scope = openScope,
+                initialSelection = blockedByScope[openScope].orEmpty(),
+                onSelectionChanged = { blockedByScope = blockedByScope + (openScope to it) },
+                onBack = { openFilterName = null }
+            )
+        }
     } else {
         MainScreen(
-            blockedCount = blockedApps.size,
-            onOpenAppFilter = { showAppFilter = true }
+            blockedCounts = blockedByScope.mapValues { it.value.size },
+            onOpenFilter = { openFilterName = it.name }
         )
     }
 }
 
 @Composable
-fun MainScreen(blockedCount: Int, onOpenAppFilter: () -> Unit) {
+fun MainScreen(
+    blockedCounts: Map<GestureFilterScope, Int>,
+    onOpenFilter: (GestureFilterScope) -> Unit
+) {
     val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
     val bgColor = if (isDark) MiuixColors.BackgroundDark else MiuixColors.BackgroundLight
@@ -173,7 +188,7 @@ fun MainScreen(blockedCount: Int, onOpenAppFilter: () -> Unit) {
             MiuixCard {
                 MiuixPreferenceItem(
                     title = "微信小程序内禁用手势",
-                    summary = "微信聊天、主界面仍可旋转；仅小程序在前台时不触发。请勿在过滤名单勾选整个微信",
+                    summary = "小程序在前台时三种手势都不触发。若只想禁某一种，用下面的单独名单",
                     checked = weChatMiniProgramGuard,
                     onCheckedChange = { newVal ->
                         weChatMiniProgramGuard = newVal
@@ -181,13 +196,16 @@ fun MainScreen(blockedCount: Int, onOpenAppFilter: () -> Unit) {
                     },
                     showDivider = true
                 )
-                MiuixNavItem(
-                    title = "应用过滤名单",
-                    summary = "命中包名、Activity 或进程时，以上手势均不触发",
-                    value = if (blockedCount > 0) "已选 $blockedCount 个" else "未设置",
-                    onClick = onOpenAppFilter,
-                    showDivider = false
-                )
+                for (scope in GestureFilterScope.entries) {
+                    val count = blockedCounts[scope] ?: 0
+                    MiuixNavItem(
+                        title = scope.listTitle(),
+                        summary = scope.listEffect(),
+                        value = if (count > 0) "已选 $count 个" else "未设置",
+                        onClick = { onOpenFilter(scope) },
+                        showDivider = scope != GestureFilterScope.TRIPLE_TAP
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(28.dp))
