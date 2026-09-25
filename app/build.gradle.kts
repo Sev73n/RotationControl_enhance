@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.benbaobaoshigemi.rotationcontrol"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
     }
 
     buildTypes {
@@ -61,6 +61,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.8.2")
+
+    testImplementation("junit:junit:4.13.2")
 }
 
 

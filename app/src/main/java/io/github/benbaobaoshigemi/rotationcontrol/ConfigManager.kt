@@ -26,6 +26,7 @@ object ConfigManager {
     const val KEY_BOTTOM_SWIPE = "lsp_rot_bottom_swipe"
     const val KEY_TRIPLE_TAP = "lsp_rot_triple_tap"
     const val KEY_IME_GUARD = "lsp_rot_ime_guard"
+    const val KEY_WECHAT_MINIPROGRAM_GUARD = "lsp_rot_wechat_miniprog"
     const val KEY_BLOCKED_APPS = "lsp_rot_blocked_apps"
 
     const val ACTION_UPDATE_CONFIG = "io.github.benbaobaoshigemi.rotationcontrol.UPDATE_CONFIG"
@@ -51,7 +52,11 @@ object ConfigManager {
         private set
 
     @Volatile
-    var blockedPackages: Set<String> = emptySet()
+    var isWeChatMiniProgramGuardEnabled: Boolean = true
+        private set
+
+    @Volatile
+    var blockedRules: Set<String> = emptySet()
         private set
 
     private var isObserverRegistered = false
@@ -72,11 +77,11 @@ object ConfigManager {
                 val key = intent.getStringExtra(EXTRA_KEY) ?: return
                 if (key == KEY_BLOCKED_APPS) {
                     val raw = intent.getStringExtra(EXTRA_STRING_VALUE) ?: ""
-                    blockedPackages = decodePackages(raw)
+                    blockedRules = decodeRules(raw)
                     try {
                         Settings.System.putString(ctx.contentResolver, key, raw)
                     } catch (_: Throwable) {}
-                    log("Broadcast config applied: blockedApps=${blockedPackages.size} $blockedPackages")
+                    log("Broadcast config applied: blockedRules=${blockedRules.size} $blockedRules")
                     return
                 }
                 val value = intent.getBooleanExtra(EXTRA_VALUE, true)
@@ -85,12 +90,13 @@ object ConfigManager {
                     KEY_BOTTOM_SWIPE -> isBottomSwipeEnabled = value
                     KEY_TRIPLE_TAP -> isTripleTapEnabled = value
                     KEY_IME_GUARD -> isImeGuardEnabled = value
+                    KEY_WECHAT_MINIPROGRAM_GUARD -> isWeChatMiniProgramGuardEnabled = value
                 }
                 // 由 system_server (UID 1000) 自身写入系统设置持久化
                 try {
                     Settings.System.putInt(ctx.contentResolver, key, if (value) 1 else 0)
                 } catch (_: Throwable) {}
-                log("Broadcast config applied: $key=$value -> twoFinger=$isTwoFingerEnabled, bottomSwipe=$isBottomSwipeEnabled, tripleTap=$isTripleTapEnabled, imeGuard=$isImeGuardEnabled")
+                log("Broadcast config applied: $key=$value -> twoFinger=$isTwoFingerEnabled, bottomSwipe=$isBottomSwipeEnabled, tripleTap=$isTripleTapEnabled, imeGuard=$isImeGuardEnabled, weChatMiniProgram=$isWeChatMiniProgramGuardEnabled")
             }
         }
         try {
@@ -117,6 +123,7 @@ object ConfigManager {
             cr.registerContentObserver(Settings.System.getUriFor(KEY_BOTTOM_SWIPE), false, observer)
             cr.registerContentObserver(Settings.System.getUriFor(KEY_TRIPLE_TAP), false, observer)
             cr.registerContentObserver(Settings.System.getUriFor(KEY_IME_GUARD), false, observer)
+            cr.registerContentObserver(Settings.System.getUriFor(KEY_WECHAT_MINIPROGRAM_GUARD), false, observer)
             cr.registerContentObserver(Settings.System.getUriFor(KEY_BLOCKED_APPS), false, observer)
             log("ContentObserver registered for gesture settings in system_server")
         } catch (t: Throwable) {
@@ -131,8 +138,9 @@ object ConfigManager {
             isBottomSwipeEnabled = Settings.System.getInt(cr, KEY_BOTTOM_SWIPE, 1) == 1
             isTripleTapEnabled = Settings.System.getInt(cr, KEY_TRIPLE_TAP, 1) == 1
             isImeGuardEnabled = Settings.System.getInt(cr, KEY_IME_GUARD, 1) == 1
-            blockedPackages = decodePackages(Settings.System.getString(cr, KEY_BLOCKED_APPS) ?: "")
-            log("Config updated: twoFinger=$isTwoFingerEnabled, bottomSwipe=$isBottomSwipeEnabled, tripleTap=$isTripleTapEnabled, imeGuard=$isImeGuardEnabled, blockedApps=${blockedPackages.size}")
+            isWeChatMiniProgramGuardEnabled = Settings.System.getInt(cr, KEY_WECHAT_MINIPROGRAM_GUARD, 1) == 1
+            blockedRules = decodeRules(Settings.System.getString(cr, KEY_BLOCKED_APPS) ?: "")
+            log("Config updated: twoFinger=$isTwoFingerEnabled, bottomSwipe=$isBottomSwipeEnabled, tripleTap=$isTripleTapEnabled, imeGuard=$isImeGuardEnabled, weChatMiniProgram=$isWeChatMiniProgramGuardEnabled, blockedRules=${blockedRules.size}")
         } catch (t: Throwable) {
             log("Error reading Settings.System: ${t.message}")
         }
@@ -198,7 +206,7 @@ object ConfigManager {
             } else {
                 Settings.System.getString(context.contentResolver, KEY_BLOCKED_APPS) ?: ""
             }
-            decodePackages(raw)
+            decodeRules(raw)
         } catch (_: Throwable) {
             emptySet()
         }
@@ -208,7 +216,7 @@ object ConfigManager {
      * App 端保存过滤名单：与布尔开关相同的 SharedPreferences + Broadcast + Settings/Root 兜底链路
      */
     fun setBlockedApps(context: Context, packages: Set<String>) {
-        val raw = encodePackages(packages)
+        val raw = encodeRules(packages)
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
             .edit().putString(KEY_BLOCKED_APPS, raw).apply()
 
@@ -228,15 +236,15 @@ object ConfigManager {
         }, "ConfigSync-$KEY_BLOCKED_APPS").start()
     }
 
-    private val PACKAGE_NAME_REGEX = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+$")
+    fun canonicalizeFilterRule(raw: String): String? = ForegroundFilterPolicy.canonicalizeRule(raw)
 
-    fun isValidPackageName(name: String): Boolean = PACKAGE_NAME_REGEX.matches(name)
+    fun isValidFilterRule(name: String): Boolean = ForegroundFilterPolicy.isValidRule(name)
 
-    private fun encodePackages(packages: Set<String>): String =
-        packages.filter { isValidPackageName(it) }.sorted().joinToString(",")
+    private fun encodeRules(rules: Set<String>): String =
+        rules.mapNotNull { canonicalizeFilterRule(it) }.toSortedSet().joinToString(",")
 
-    private fun decodePackages(raw: String): Set<String> =
-        raw.split(',').map { it.trim() }.filter { isValidPackageName(it) }.toSet()
+    private fun decodeRules(raw: String): Set<String> =
+        raw.split(',').map { it.trim() }.mapNotNull { canonicalizeFilterRule(it) }.toSet()
 
     /**
      * 在 App 启动时，将本地所有配置同步广播给 system_server
@@ -247,12 +255,14 @@ object ConfigManager {
         val bottomSwipe = sp.getBoolean(KEY_BOTTOM_SWIPE, true)
         val tripleTap = sp.getBoolean(KEY_TRIPLE_TAP, true)
         val imeGuard = sp.getBoolean(KEY_IME_GUARD, true)
+        val weChatMiniProgram = sp.getBoolean(KEY_WECHAT_MINIPROGRAM_GUARD, true)
 
         listOf(
             KEY_TWO_FINGER to twoFinger,
             KEY_BOTTOM_SWIPE to bottomSwipe,
             KEY_TRIPLE_TAP to tripleTap,
-            KEY_IME_GUARD to imeGuard
+            KEY_IME_GUARD to imeGuard,
+            KEY_WECHAT_MINIPROGRAM_GUARD to weChatMiniProgram
         ).forEach { (k, v) ->
             val intent = Intent(ACTION_UPDATE_CONFIG).apply {
                 putExtra(EXTRA_KEY, k)

@@ -150,8 +150,9 @@ fun AppFilterScreen(
             .toList()
     }
 
-    val canAddManually = ConfigManager.isValidPackageName(trimmedQuery) &&
-            allEntries.none { it.packageName == trimmedQuery }
+    val canonicalRule = ConfigManager.canonicalizeFilterRule(trimmedQuery)
+    val canAddManually = canonicalRule != null &&
+            allEntries.none { it.packageName == canonicalRule }
 
     Box(
         modifier = Modifier
@@ -184,7 +185,7 @@ fun AppFilterScreen(
                         color = textPrimary
                     )
                     Text(
-                        text = "已选 ${selected.size} 个 · 前台为这些应用时不触发手势",
+                        text = "已选 ${selected.size} 个 · 命中包名、Activity 或进程时不触发",
                         fontSize = 12.sp,
                         color = textSecondary
                     )
@@ -203,7 +204,7 @@ fun AppFilterScreen(
                 contentAlignment = Alignment.CenterStart
             ) {
                 if (query.isEmpty()) {
-                    Text(text = "搜索应用名或包名", fontSize = 15.sp, color = textSecondary)
+                    Text(text = "搜索应用名、包名、Activity 或进程", fontSize = 15.sp, color = textSecondary)
                 }
                 BasicTextField(
                     value = query,
@@ -253,10 +254,10 @@ fun AppFilterScreen(
                         .navigationBarsPadding(),
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp)
                 ) {
-                    if (canAddManually) {
+                    if (canAddManually && canonicalRule != null) {
                         item(key = "__manual_add__") {
-                            ManualAddRow(packageName = trimmedQuery, surface = surface, primary = primary) {
-                                selected = selected + trimmedQuery
+                            ManualAddRow(packageName = canonicalRule, surface = surface, primary = primary) {
+                                selected = selected + canonicalRule
                                 query = ""
                             }
                             Spacer(modifier = Modifier.height(10.dp))
@@ -265,7 +266,11 @@ fun AppFilterScreen(
                     if (visibleEntries.isEmpty() && !canAddManually) {
                         item(key = "__empty__") {
                             Text(
-                                text = if (trimmedQuery.isEmpty()) "没有可显示的应用" else "没有匹配的应用，输入完整包名可手动添加",
+                                text = if (trimmedQuery.isEmpty()) {
+                                    "没有可显示的应用"
+                                } else {
+                                    "没有匹配项。可输入包名、Activity 类名或进程名，例如 com.tencent.mm:appbrand0"
+                                },
                                 fontSize = 13.sp,
                                 color = textSecondary,
                                 modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
@@ -356,7 +361,7 @@ private fun AppRow(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = if (entry.isInstalled) entry.packageName else "${entry.packageName} · 未安装",
+                text = ruleCaption(entry),
                 fontSize = 12.sp,
                 color = textSecondary,
                 maxLines = 1,
@@ -399,7 +404,7 @@ private fun ManualAddRow(packageName: String, surface: Color, primary: Color, on
     ) {
         Text(text = "+", fontSize = 22.sp, color = primary, modifier = Modifier.width(40.dp))
         Text(
-            text = "手动添加包名 $packageName",
+            text = "添加过滤规则 $packageName",
             fontSize = 15.sp,
             color = primary,
             maxLines = 1,
@@ -437,6 +442,12 @@ private fun ActionText(text: String, color: Color, enabled: Boolean, onClick: ()
             .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 6.dp, vertical = 4.dp)
     )
+}
+
+private fun ruleCaption(entry: AppEntry): String {
+    if (entry.isInstalled) return entry.packageName
+    val kind = if (':' in entry.packageName) "进程" else "Activity / 自定义规则"
+    return "$kind · ${entry.packageName}"
 }
 
 private fun loadInstalledApps(context: Context): List<AppEntry> {

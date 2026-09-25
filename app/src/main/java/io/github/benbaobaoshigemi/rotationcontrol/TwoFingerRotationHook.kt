@@ -129,8 +129,8 @@ object TwoFingerRotationHook {
     }
 
     private fun passesAppFilter(gesture: String): Boolean {
-        val blocked = ForegroundAppFilter.blockedForegroundPackage(systemContext) ?: return true
-        XposedBridge.log("[$TAG] $gesture suppressed: foreground app $blocked is in filter list")
+        val reason = ForegroundAppFilter.suppressionReason(systemContext) ?: return true
+        XposedBridge.log("[$TAG] $gesture suppressed: $reason")
         return false
     }
 

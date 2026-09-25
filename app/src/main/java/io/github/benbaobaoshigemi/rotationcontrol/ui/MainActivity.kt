@@ -93,6 +93,9 @@ fun MainScreen(blockedCount: Int, onOpenAppFilter: () -> Unit) {
     var imeGuardEnabled by remember {
         mutableStateOf(ConfigManager.getSetting(context, ConfigManager.KEY_IME_GUARD, true))
     }
+    var weChatMiniProgramGuard by remember {
+        mutableStateOf(ConfigManager.getSetting(context, ConfigManager.KEY_WECHAT_MINIPROGRAM_GUARD, true))
+    }
 
     var showRestartDialog by remember { mutableStateOf(false) }
 
@@ -168,9 +171,19 @@ fun MainScreen(blockedCount: Int, onOpenAppFilter: () -> Unit) {
             Spacer(modifier = Modifier.height(16.dp))
 
             MiuixCard {
+                MiuixPreferenceItem(
+                    title = "微信小程序内禁用手势",
+                    summary = "微信聊天、主界面仍可旋转；仅小程序在前台时不触发。请勿在过滤名单勾选整个微信",
+                    checked = weChatMiniProgramGuard,
+                    onCheckedChange = { newVal ->
+                        weChatMiniProgramGuard = newVal
+                        ConfigManager.setSetting(context, ConfigManager.KEY_WECHAT_MINIPROGRAM_GUARD, newVal)
+                    },
+                    showDivider = true
+                )
                 MiuixNavItem(
                     title = "应用过滤名单",
-                    summary = "前台为已选应用时，以上手势均不触发",
+                    summary = "命中包名、Activity 或进程时，以上手势均不触发",
                     value = if (blockedCount > 0) "已选 $blockedCount 个" else "未设置",
                     onClick = onOpenAppFilter,
                     showDivider = false

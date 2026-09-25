@@ -22,7 +22,12 @@
 - **原生状态无缝同步**：屏幕任意区域快速轻敲 3 次，无缝切换系统原生旋转锁定（Auto-Rotate / Rotation Lock），状态与控制中心磁贴（Quick Settings Tile）及系统设置完美同步。
 - **差异化触觉震动反馈**：解锁与锁定时分别触发轻柔、清脆的触觉震动提示。
 
-### 4. 纯正 MIUIX / HyperOS 风格设置面板
+### 4. 前台过滤可精确到 Activity 与进程
+- **应用过滤名单**：前台命中已选包名时，三种手势都不触发。
+- **Activity / 进程规则**：可手动添加类名（如 `com.tencent.mm.plugin.appbrand.ui.AppBrandUI`）或进程名（如 `com.tencent.mm:appbrand0`）。类名后接纯数字的变体（`AppBrandUI1`…`AppBrandUI4`）与进程名后接纯数字的变体（`:appbrand0`…`:appbrand4`）一并命中。
+- **微信小程序策略（默认开启）**：微信聊天、主界面仍可旋转；小程序容器在前台时不触发。请不要在过滤名单里勾选整个微信，否则主界面也会被拦截。
+
+### 5. 纯正 MIUIX / HyperOS 风格设置面板
 - **极简卡片美学**：遵循超椭圆（Squircle）大圆角、阻尼弹簧胶囊开关与动态微缩触感规范。
 - **零延迟无权限热通信**：采用动态广播 IPC 直通 `system_server`，手势开关即调即生效（< 5ms），无需依赖 Root 权限，本地 SharedPreferences 永久持久化。
 - **优雅系统框架重启**：内置优雅重启框架（Zygote）功能，避免异常硬杀引发系统崩溃计数。
